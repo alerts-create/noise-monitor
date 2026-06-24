@@ -1,0 +1,133 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>St. Ben's Noise Monitor</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            height: 100vh;
+            display: flex;
+            flex-direction: column;
+            justify-content: center;
+            align-items: center;
+            /* This is the secret to a calm monitor: a slow 2-second fade */
+            transition: background-color 2s ease; 
+            font-family: -apple-system, sans-serif;
+            background-color: #f0f0f0; /* Start neutral */
+        }
+
+        #bear-graphic {
+            font-size: 100px; /* Placeholder for your actual Bear image */
+            margin-bottom: 20px;
+        }
+
+        #start-btn {
+            padding: 15px 40px;
+            font-size: 20px;
+            background-color: #333;
+            color: white;
+            border: none;
+            border-radius: 10px;
+            cursor: pointer;
+            box-shadow: 0 4px 6px rgba(0,0,0,0.1);
+        }
+
+        /* Calm, muted colors so it's not a distraction */
+        .quiet { background-color: #A3B18A; } /* Muted Sage Green */
+        .warning { background-color: #E9C46A; } /* Muted Mustard */
+        .loud { background-color: #E07A5F; } /* Muted Brick Red */
+
+        /* Hidden settings panel for the teacher */
+        #settings {
+            position: absolute;
+            bottom: 10px;
+            right: 10px;
+            opacity: 0.1; /* Almost invisible so kids don't tap it */
+        }
+        #settings:hover { opacity: 1; }
+    </style>
+</head>
+<body>
+
+    <div id="bear-graphic">🐻💤</div>
+    
+    <button id="start-btn">Start Monitor</button>
+
+    <div id="settings">
+        <label>Sensitivity: <input type="range" id="sensitivity" min="1" max="5" value="2"></label>
+    </div>
+
+    <script>
+        let audioContext;
+        let analyser;
+        let microphone;
+        let rollingAverage = 0;
+
+        const startBtn = document.getElementById('start-btn');
+        const bearGraphic = document.getElementById('bear-graphic');
+        const sensitivitySlider = document.getElementById('sensitivity');
+
+        startBtn.addEventListener('click', async () => {
+            try {
+                // iPhone requires this older prefix
+                const AudioContext = window.AudioContext || window.webkitAudioContext;
+                audioContext = new AudioContext();
+
+                // Ask the iPhone for microphone permission
+                const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+                
+                analyser = audioContext.createAnalyser();
+                analyser.fftSize = 256;
+                
+                microphone = audioContext.createMediaStreamSource(stream);
+                microphone.connect(analyser);
+
+                // Hide the button once started
+                startBtn.style.display = 'none';
+                
+                // Start the listening loop
+                monitorNoise();
+            } catch (err) {
+                alert("Microphone access denied or not available.");
+            }
+        });
+
+        function monitorNoise() {
+            const dataArray = new Uint8Array(analyser.frequencyBinCount);
+            analyser.getByteFrequencyData(dataArray);
+
+            // Calculate current volume
+            let sum = 0;
+            for (let i = 0; i < dataArray.length; i++) {
+                sum += dataArray[i];
+            }
+            let currentVolume = sum / dataArray.length;
+
+            // Apply sensitivity multiplier
+            currentVolume = currentVolume * sensitivitySlider.value;
+
+            // SMOOTHING LOGIC: This stops the app from reacting to dropped pencils
+            // It blends 95% of the old volume with 5% of the new volume
+            rollingAverage = (rollingAverage * 0.95) + (currentVolume * 0.05);
+
+            // Change colors and bear based on the rolling average
+            if (rollingAverage < 30) {
+                document.body.className = 'quiet';
+                bearGraphic.innerText = '🐻💤'; // Sleeping bear
+            } else if (rollingAverage < 60) {
+                document.body.className = 'warning';
+                bearGraphic.innerText = '🐻👀'; // Awake, alert bear
+            } else {
+                document.body.className = 'loud';
+                bearGraphic.innerText = '🐻🛑'; // Stop/Shh bear
+            }
+
+            // Loop forever
+            requestAnimationFrame(monitorNoise);
+        }
+    </script>
+</body>
+</html>
